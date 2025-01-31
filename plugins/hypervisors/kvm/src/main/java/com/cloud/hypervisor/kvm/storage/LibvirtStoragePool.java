@@ -316,11 +316,13 @@ public class LibvirtStoragePool implements KVMStoragePool {
 
     @Override
     public boolean isPoolSupportHA() {
-        return type == StoragePoolType.NetworkFilesystem;
+        String kvmLocalUuid = AgentPropertiesFileHandler.getPropertyValue(AgentProperties.LOCAL_STORAGE_UUID);
+        return type == StoragePoolType.NetworkFilesystem || type == StoragePoolType.Filesystem && !kvmLocalUuid.equals(this.uuid);
     }
 
     public String getHearthBeatPath() {
-        if (type == StoragePoolType.NetworkFilesystem) {
+        String kvmLocalPath = AgentPropertiesFileHandler.getPropertyValue(AgentProperties.LOCAL_STORAGE_PATH);
+        if (type == StoragePoolType.NetworkFilesystem || type == StoragePoolType.Filesystem && localPath != kvmLocalPath) {
             String kvmScriptsDir = AgentPropertiesFileHandler.getPropertyValue(AgentProperties.KVM_SCRIPTS_DIR);
             return Script.findScript(kvmScriptsDir, "kvmheartbeat.sh");
         }
@@ -330,8 +332,11 @@ public class LibvirtStoragePool implements KVMStoragePool {
 
     public String createHeartBeatCommand(HAStoragePool primaryStoragePool, String hostPrivateIp, boolean hostValidation) {
         Script cmd = new Script(primaryStoragePool.getPool().getHearthBeatPath(), HeartBeatUpdateTimeout, logger);
-        cmd.add("-i", primaryStoragePool.getPoolIp());
-        cmd.add("-p", primaryStoragePool.getPoolMountSourcePath());
+
+        if (type == StoragePoolType.NetworkFilesystem) {
+            cmd.add("-i", primaryStoragePool.getPoolIp());
+            cmd.add("-p", primaryStoragePool.getPoolMountSourcePath());
+        }
         cmd.add("-m", primaryStoragePool.getMountDestPath());
 
         if (hostValidation) {
@@ -360,8 +365,11 @@ public class LibvirtStoragePool implements KVMStoragePool {
         boolean validResult = false;
         String hostIp = host.getPrivateNetwork().getIp();
         Script cmd = new Script(getHearthBeatPath(), HeartBeatCheckerTimeout, logger);
-        cmd.add("-i", pool.getPoolIp());
-        cmd.add("-p", pool.getPoolMountSourcePath());
+
+        if (type == StoragePoolType.NetworkFilesystem) {
+            cmd.add("-i", pool.getPoolIp());
+            cmd.add("-p", pool.getPoolMountSourcePath());
+        }
         cmd.add("-m", pool.getMountDestPath());
         cmd.add("-h", hostIp);
         cmd.add("-r");
@@ -385,8 +393,12 @@ public class LibvirtStoragePool implements KVMStoragePool {
     @Override
     public Boolean vmActivityCheck(HAStoragePool pool, HostTO host, Duration activityScriptTimeout, String volumeUUIDListString, String vmActivityCheckPath, long duration) {
         Script cmd = new Script(vmActivityCheckPath, activityScriptTimeout.getStandardSeconds(), logger);
-        cmd.add("-i", pool.getPoolIp());
-        cmd.add("-p", pool.getPoolMountSourcePath());
+
+        if (type == StoragePoolType.NetworkFilesystem) {
+            cmd.add("-i", pool.getPoolIp());
+            cmd.add("-p", pool.getPoolMountSourcePath());
+        }
+
         cmd.add("-m", pool.getMountDestPath());
         cmd.add("-h", host.getPrivateNetwork().getIp());
         cmd.add("-u", volumeUUIDListString);
